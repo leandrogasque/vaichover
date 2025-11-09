@@ -31,11 +31,10 @@ const App = () => (
 
     <footer>
       <p>
-        Dados fornecidos por{' '}
+        Criado por Leandro Gasque &amp; Codex · Dados: {' '}
         <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
           Open-Meteo
         </a>
-        .
       </p>
     </footer>
   </div>
