@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { useWeatherController } from '../controllers/useWeatherController'
 import type { HourlyPoint, WeatherReport } from '../models/weather'
 
@@ -326,6 +326,11 @@ export const WeatherView = () => {
     searchWeather,
     selectSavedLocation,
     history,
+    preferences,
+    updatePreferences,
+    canNotify,
+    notificationPermission,
+    requestNotificationPermission,
   } = useWeatherController()
   const { report, error, status } = state
   const [query, setQuery] = useState('')
@@ -370,6 +375,20 @@ export const WeatherView = () => {
 
   const canShare = typeof navigator.share === 'function'
 
+  const notificationStatusCopy = useMemo(() => {
+    if (!canNotify) return 'Seu navegador não suporta notificações.'
+    if (notificationPermission === 'denied') {
+      return 'Notificações bloqueadas. Altere nas configurações do navegador para reativar.'
+    }
+    if (!preferences.enabled) {
+      return 'Alertas desativados. Ative para receber aviso quando a chuva passar do limite.'
+    }
+    if (notificationPermission === 'default') {
+      return 'Permita notificações para receber alertas automáticos.'
+    }
+    return `Alertas ativos: avisaremos quando a chance de chuva passar de ${preferences.threshold}%.`
+  }, [canNotify, notificationPermission, preferences.enabled, preferences.threshold])
+
   const needsPermissionPrompt = error?.code === 'GEO_DENIED'
 
   const onSubmitSearch = (event: FormEvent<HTMLFormElement>) => {
@@ -390,6 +409,18 @@ export const WeatherView = () => {
     } catch {
       // usuário cancelou
     }
+  }
+
+  const handleThresholdChange = (event: ChangeEvent<HTMLInputElement>) => {
+    updatePreferences({ threshold: Number(event.target.value) })
+  }
+
+  const toggleAlerts = () => {
+    updatePreferences({ enabled: !preferences.enabled })
+  }
+
+  const handleNotificationPermission = () => {
+    requestNotificationPermission()
   }
 
   return (
@@ -440,6 +471,46 @@ export const WeatherView = () => {
             Permitir localização
           </button>
         </div>
+      )}
+
+      {canNotify && (
+        <section className="alerts-card">
+          <header>
+            <p>Alertas inteligentes</p>
+            <span>Receba avisos quando a probabilidade de chuva atingir seu limite.</span>
+          </header>
+          <label className="slider-label">
+            <span>Probabilidade mínima: {preferences.threshold}%</span>
+            <input
+              type="range"
+              min={20}
+              max={100}
+              step={5}
+              value={preferences.threshold}
+              onChange={handleThresholdChange}
+            />
+          </label>
+          <div className="alerts-controls">
+            <button
+              type="button"
+              className="secondary-button"
+              data-state={preferences.enabled ? 'active' : 'inactive'}
+              onClick={toggleAlerts}
+            >
+              {preferences.enabled ? 'Desativar alertas' : 'Ativar alertas'}
+            </button>
+            {notificationPermission !== 'granted' && (
+              <button
+                type="button"
+                className="secondary-button outline"
+                onClick={handleNotificationPermission}
+              >
+                Permitir notificações
+              </button>
+            )}
+          </div>
+          <small className="alerts-status">{notificationStatusCopy}</small>
+        </section>
       )}
 
       <section className="status">{statusElement}</section>

@@ -11,6 +11,7 @@ Aplicação web responsiva criada com React + Vite + TypeScript. Ela identifica 
 - **Camada de estilo:** CSS moderno no escopo do App (`src/App.css` + `src/index.css`) para oferecer UI limpa e responsiva pronta para dispositivos móveis.
 - **Busca manual + histórico:** a barra no topo usa o geocoding público da Open-Meteo para localizar cidades e salvar consultas recentes como fallback quando o GPS é negado.
 - **Timeline horária e compartilhamento:** um cartão exclusivo mostra a tendência das próximas 12 horas e o botão “Compartilhar previsão” usa a Web Share API para enviar o resumo para outras pessoas.
+- **Alertas inteligentes:** defina um limite mínimo de probabilidade e receba notificações quando o app detectar chuva acima do patamar escolhido (requer permissão do navegador).
 
 ## Como executar localmente
 
@@ -33,4 +34,5 @@ Aplicação web responsiva criada com React + Vite + TypeScript. Ela identifica 
 - A geolocalização exige conexão segura (`https://`) quando hospedada na web. Ao testar localmente via `npm run dev`, o navegador pode pedir permissão explícita para compartilhar a localização.
 - Caso o usuário negue o acesso ou o dispositivo não ofereça GPS, o app mostra mensagens amigáveis e permite tentar novamente ou pesquisar manualmente a cidade desejada.
 - A aplicação pode ser instalada como PWA (Adicionar à tela inicial) e mantém os últimos dados no modo offline.
+- Alertas funcionam somente após conceder permissão de notificações; caso o navegador bloqueie, libere nas configurações do site.
 - Toda a lógica é client-side, utilizando apenas APIs gratuitas, sem necessidade de chaves ou infraestrutura adicional.

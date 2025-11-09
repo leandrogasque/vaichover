@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { WeatherError, WeatherReport, WeatherState } from '../models/weather'
 import { fetchWeatherByCoords } from '../services/weatherService'
 import {
@@ -14,7 +14,20 @@ interface SavedLocation {
 }
 
 const HISTORY_KEY = 'vaichover.history'
+const PREF_KEY = 'vaichover.alertPrefs'
 const HISTORY_LIMIT = 5
+const NOTIFY_COOLDOWN_MS = 60 * 60 * 1000
+
+interface AlertPreferences {
+  enabled: boolean
+  threshold: number
+  lastNotifiedAt?: string
+}
+
+const DEFAULT_PREFS: AlertPreferences = {
+  enabled: false,
+  threshold: 60,
+}
 
 const GEO_OPTIONS: PositionOptions = {
   enableHighAccuracy: true,
@@ -44,6 +57,28 @@ const writeHistory = (entries: SavedLocation[]) => {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(entries))
   } catch {
     // ignore quota/storage errors silently
+  }
+}
+
+const readPreferences = (): AlertPreferences => {
+  try {
+    const raw = localStorage.getItem(PREF_KEY)
+    if (!raw) return DEFAULT_PREFS
+    const parsed = JSON.parse(raw)
+    return {
+      ...DEFAULT_PREFS,
+      ...parsed,
+    }
+  } catch {
+    return DEFAULT_PREFS
+  }
+}
+
+const writePreferences = (prefs: AlertPreferences) => {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify(prefs))
+  } catch {
+    // ignore
   }
 }
 
@@ -83,6 +118,11 @@ const mergeReportLabel = (report: WeatherReport, label?: string): WeatherReport 
 export const useWeatherController = () => {
   const [state, setState] = useState<WeatherState>({ status: 'idle' })
   const [history, setHistory] = useState<SavedLocation[]>(() => readHistory())
+  const [preferences, setPreferences] = useState<AlertPreferences>(() => readPreferences())
+  const canNotify = useMemo(() => typeof window !== 'undefined' && 'Notification' in window, [])
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    canNotify ? Notification.permission : 'default',
+  )
 
   const persistHistory = useCallback((entry: SavedLocation) => {
     setHistory((current) => {
@@ -92,6 +132,47 @@ export const useWeatherController = () => {
       return updated
     })
   }, [])
+
+  const updatePreferences = useCallback((partial: Partial<AlertPreferences>) => {
+    setPreferences((current) => {
+      const next = { ...current, ...partial }
+      writePreferences(next)
+      return next
+    })
+  }, [])
+
+  const requestNotificationPermission = useCallback(async () => {
+    if (!canNotify) return 'default'
+    try {
+      const result = await Notification.requestPermission()
+      setNotificationPermission(result)
+      return result
+    } catch {
+      return notificationPermission
+    }
+  }, [canNotify, notificationPermission])
+
+  const maybeSendNotification = useCallback(
+    (report: WeatherReport, prefs: AlertPreferences) => {
+      if (!prefs.enabled || !canNotify || notificationPermission !== 'granted') return
+      if (report.rainProbability < prefs.threshold) return
+      const now = Date.now()
+      const last = prefs.lastNotifiedAt ? new Date(prefs.lastNotifiedAt).getTime() : 0
+      if (now - last < NOTIFY_COOLDOWN_MS) return
+
+      try {
+        const body = `${report.location.label ?? 'Sua localização'} · ${Math.round(
+          report.temperature,
+        )}°C · ${Math.round(report.rainProbability)}% de chance de chuva`
+        // eslint-disable-next-line no-new
+        new Notification('Vai chover nas próximas horas?', { body })
+        updatePreferences({ lastNotifiedAt: new Date().toISOString() })
+      } catch {
+        // Notification instantiation pode falhar em alguns navegadores
+      }
+    },
+    [canNotify, notificationPermission, updatePreferences],
+  )
 
   const handleSuccess = useCallback(
     (report: WeatherReport) => {
@@ -103,8 +184,9 @@ export const useWeatherController = () => {
           longitude: report.location.longitude,
         })
       }
+      maybeSendNotification(report, preferences)
     },
-    [persistHistory],
+    [persistHistory, maybeSendNotification, preferences],
   )
 
   const loadWeather = useCallback(() => {
@@ -229,5 +311,10 @@ export const useWeatherController = () => {
     searchWeather,
     selectSavedLocation,
     history,
+    preferences,
+    updatePreferences,
+    canNotify,
+    notificationPermission,
+    requestNotificationPermission,
   }
 }
