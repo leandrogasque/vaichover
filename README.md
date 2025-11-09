@@ -32,4 +32,5 @@ Aplicação web responsiva criada com React + Vite + TypeScript. Ela identifica 
 
 - A geolocalização exige conexão segura (`https://`) quando hospedada na web. Ao testar localmente via `npm run dev`, o navegador pode pedir permissão explícita para compartilhar a localização.
 - Caso o usuário negue o acesso ou o dispositivo não ofereça GPS, o app mostra mensagens amigáveis e permite tentar novamente ou pesquisar manualmente a cidade desejada.
+- A aplicação pode ser instalada como PWA (Adicionar à tela inicial) e mantém os últimos dados no modo offline.
 - Toda a lógica é client-side, utilizando apenas APIs gratuitas, sem necessidade de chaves ou infraestrutura adicional.

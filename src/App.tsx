@@ -22,7 +22,8 @@ const App = () => (
           segundos se precisa sair preparado.
         </p>
         <p className="microcopy">
-          Atualize sempre que mudar de bairro ou quiser previsões mais finas.
+          Atualize sempre que mudar de bairro ou quiser previsões mais finas. Funciona offline ao
+          adicionar à tela inicial.
         </p>
       </header>
 
