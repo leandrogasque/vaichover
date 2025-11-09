@@ -41,6 +41,16 @@ Aplicação web responsiva criada com React + Vite + TypeScript. Ela identifica 
 ## Push remoto (Firebase Cloud Messaging)
 
 1. Gere as chaves Web Push no console do Firebase (Configurações do projeto > Cloud Messaging) e copie o `firebaseConfig` (API key, sender id, etc.).
-2. Preencha o `.env` com `VITE_FIREBASE_*` + `VITE_PUSH_PUBLIC_KEY` e reinicie o projeto.
+2. Preencha o `.env` com `VITE_FIREBASE_*`, `VITE_PUSH_PUBLIC_KEY` e defina no Vercel a variável `FIREBASE_SERVICE_ACCOUNT` (conteúdo JSON da conta de serviço).
 3. No cartão “Alertas Inteligentes”, clique em **Ativar push**. Copie o token FCM exibido no textarea e salve-o no backend.
-4. No servidor, use o `firebase-admin` (`messaging().sendToDevice(token, payload)`) para enviar notificações. O `public/custom-sw.js` (com Firebase Messaging) mostra o alerta e abre o app ao toque.
+4. Faça um POST para `https://<seu-projeto>.vercel.app/api/send-notification` com um JSON como:
+   ```json
+   {
+     "token": "TOKEN_COPIADO_DO_APP",
+     "title": "Alerta de chuva",
+     "body": "70% de chance nas próximas horas",
+     "url": "https://seu-dominio.com/"
+   }
+   ```
+   O endpoint usa `firebase-admin` para chamar `messaging().sendToDevice`.
+5. O `custom-sw.js` (alimentado pelo Firebase Messaging) recebe o push, exibe a notificação e abre o app ao tocar.
