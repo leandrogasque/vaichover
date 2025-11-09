@@ -9,7 +9,8 @@ Aplicação web responsiva criada com React + Vite + TypeScript. Ela identifica 
 - **Controle (Controller):** `src/controllers/useWeatherController.ts` é um hook que orquestra geolocalização, buscas manuais por cidade, chamadas à API e estado global da tela.
 - **Visão (View):** componentes React em `src/views/WeatherView.tsx` e `src/App.tsx` renderizam o cartão com temperatura, mensagem sobre chuva e feedback de status.
 - **Camada de estilo:** CSS moderno no escopo do App (`src/App.css` + `src/index.css`) para oferecer UI limpa e responsiva pronta para dispositivos móveis.
-- **Busca manual:** a barra no topo usa o geocoding público da Open-Meteo para localizar cidades e atualizar o painel mesmo sem GPS ativo.
+- **Busca manual + histórico:** a barra no topo usa o geocoding público da Open-Meteo para localizar cidades e salvar consultas recentes como fallback quando o GPS é negado.
+- **Timeline horária e compartilhamento:** um cartão exclusivo mostra a tendência das próximas 12 horas e o botão “Compartilhar previsão” usa a Web Share API para enviar o resumo para outras pessoas.
 
 ## Como executar localmente
 

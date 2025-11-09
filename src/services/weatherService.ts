@@ -1,5 +1,5 @@
 import { RAIN_THRESHOLD } from '../models/weather'
-import type { DailyForecast, GeoPoint, WeatherReport } from '../models/weather'
+import type { DailyForecast, GeoPoint, HourlyPoint, WeatherReport } from '../models/weather'
 
 const OPEN_METEO_ENDPOINT = 'https://api.open-meteo.com/v1/forecast'
 
@@ -18,6 +18,11 @@ interface OpenMeteoResponse {
     precipitation_probability_max: number[]
     precipitation_sum: number[]
   }
+  hourly?: {
+    time: string[]
+    temperature_2m: number[]
+    precipitation_probability: number[]
+  }
 }
 
 const buildUrl = (latitude: number, longitude: number) => {
@@ -27,8 +32,10 @@ const buildUrl = (latitude: number, longitude: number) => {
     current: 'temperature_2m',
     daily:
       'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum',
+    hourly: 'temperature_2m,precipitation_probability',
     timezone: 'auto',
     forecast_days: '5',
+    past_days: '0',
   })
 
   return `${OPEN_METEO_ENDPOINT}?${params.toString()}`
@@ -47,6 +54,18 @@ const buildForecast = (payload: OpenMeteoResponse): DailyForecast[] => {
       willRain: precipitationProbability >= RAIN_THRESHOLD,
     }
   })
+}
+
+const normalizeHourly = (payload: OpenMeteoResponse): HourlyPoint[] => {
+  const times = payload.hourly?.time ?? []
+  const temperatures = payload.hourly?.temperature_2m ?? []
+  const precipitation = payload.hourly?.precipitation_probability ?? []
+
+  return times.slice(0, 12).map((time, index) => ({
+    time,
+    temperature: temperatures[index] ?? 0,
+    precipitationProbability: precipitation[index] ?? 0,
+  }))
 }
 
 const normalizeReport = (
@@ -74,6 +93,7 @@ const normalizeReport = (
       label: requestedLocation.label,
     },
     forecast: buildForecast(payload),
+    hourly: normalizeHourly(payload),
   }
 }
 

@@ -13,6 +13,7 @@ export interface WeatherReport {
   updatedAt: Date
   location: GeoPoint
   forecast: DailyForecast[]
+  hourly: HourlyPoint[]
 }
 
 export interface WeatherError {
@@ -34,4 +35,10 @@ export interface DailyForecast {
   maxTemp: number
   precipitationProbability: number
   willRain: boolean
+}
+
+export interface HourlyPoint {
+  time: string
+  temperature: number
+  precipitationProbability: number
 }

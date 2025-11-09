@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { WeatherError, WeatherState } from '../models/weather'
+import type { WeatherError, WeatherReport, WeatherState } from '../models/weather'
 import { fetchWeatherByCoords } from '../services/weatherService'
 import {
   formatCitySuggestionLabel,
@@ -7,10 +7,44 @@ import {
   searchCities,
 } from '../services/locationService'
 
+interface SavedLocation {
+  label: string
+  latitude: number
+  longitude: number
+}
+
+const HISTORY_KEY = 'vaichover.history'
+const HISTORY_LIMIT = 5
+
 const GEO_OPTIONS: PositionOptions = {
   enableHighAccuracy: true,
   timeout: 10_000,
   maximumAge: 0,
+}
+
+const readHistory = (): SavedLocation[] => {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (entry): entry is SavedLocation =>
+        typeof entry?.label === 'string' &&
+        typeof entry?.latitude === 'number' &&
+        typeof entry?.longitude === 'number',
+    )
+  } catch {
+    return []
+  }
+}
+
+const writeHistory = (entries: SavedLocation[]) => {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(entries))
+  } catch {
+    // ignore quota/storage errors silently
+  }
 }
 
 const mapGeoError = (error: GeolocationPositionError): WeatherError => {
@@ -19,26 +53,59 @@ const mapGeoError = (error: GeolocationPositionError): WeatherError => {
       return {
         code: 'GEO_DENIED',
         message:
-          'Permissão de localização negada. Ative o GPS para descobrir se vai chover.',
+          'Permissão de localização negada. Ative o GPS ou selecione uma cidade manualmente.',
       }
     case error.POSITION_UNAVAILABLE:
       return {
         code: 'GEO_UNAVAILABLE',
-        message:
-          'Não foi possível determinar sua localização. Tente novamente em instantes.',
+        message: 'Não foi possível determinar sua localização. Tente novamente em instantes.',
       }
     case error.TIMEOUT:
     default:
       return {
         code: 'UNKNOWN',
-        message:
-          'A consulta demorou mais do que o esperado. Tente novamente mais tarde.',
+        message: 'A consulta demorou mais do que o esperado. Tente novamente mais tarde.',
       }
+  }
+}
+
+const mergeReportLabel = (report: WeatherReport, label?: string): WeatherReport => {
+  if (!label) return report
+  return {
+    ...report,
+    location: {
+      ...report.location,
+      label,
+    },
   }
 }
 
 export const useWeatherController = () => {
   const [state, setState] = useState<WeatherState>({ status: 'idle' })
+  const [history, setHistory] = useState<SavedLocation[]>(() => readHistory())
+
+  const persistHistory = useCallback((entry: SavedLocation) => {
+    setHistory((current) => {
+      const filtered = current.filter((item) => item.label !== entry.label)
+      const updated = [entry, ...filtered].slice(0, HISTORY_LIMIT)
+      writeHistory(updated)
+      return updated
+    })
+  }, [])
+
+  const handleSuccess = useCallback(
+    (report: WeatherReport) => {
+      setState({ status: 'success', report })
+      if (report.location.label) {
+        persistHistory({
+          label: report.location.label,
+          latitude: report.location.latitude,
+          longitude: report.location.longitude,
+        })
+      }
+    },
+    [persistHistory],
+  )
 
   const loadWeather = useCallback(() => {
     if (!navigator.geolocation) {
@@ -47,7 +114,7 @@ export const useWeatherController = () => {
         error: {
           code: 'GEO_UNAVAILABLE',
           message:
-            'Seu dispositivo não oferece geolocalização. Digite a cidade manualmente.',
+            'Seu dispositivo não oferece geolocalização. Digite ou escolha a cidade manualmente.',
         },
       })
       return
@@ -63,26 +130,15 @@ export const useWeatherController = () => {
             fetchWeatherByCoords(coords.latitude, coords.longitude),
           ])
 
-          const enrichedReport = label
-            ? {
-                ...report,
-                location: {
-                  ...report.location,
-                  label,
-                },
-              }
-            : report
-
-          setState({ status: 'success', report: enrichedReport })
+          const enrichedReport = mergeReportLabel(report, label)
+          handleSuccess(enrichedReport)
         } catch (error) {
           setState({
             status: 'error',
             error: {
               code: 'NETWORK',
               message:
-                error instanceof Error
-                  ? error.message
-              : 'Não foi possível buscar o clima agora.',
+                error instanceof Error ? error.message : 'Não foi possível buscar o clima agora.',
             },
           })
         }
@@ -95,47 +151,72 @@ export const useWeatherController = () => {
       },
       GEO_OPTIONS,
     )
-  }, [])
+  }, [handleSuccess])
 
-  const searchWeather = useCallback(async (query: string) => {
-    const normalized = query.trim()
-    if (!normalized) {
-      setState({
-        status: 'error',
-        error: {
-          code: 'UNKNOWN',
-          message: 'Digite o nome de uma cidade para pesquisar.',
-        },
-      })
-      return
-    }
-
-    setState({ status: 'loading' })
-
-    try {
-      const matches = await searchCities(normalized)
-      const target = matches[0]
-
-      if (!target) {
-        throw new Error('Não encontramos essa cidade. Tente outro nome.')
+  const searchWeather = useCallback(
+    async (query: string) => {
+      const normalized = query.trim()
+      if (!normalized) {
+        setState({
+          status: 'error',
+          error: {
+            code: 'UNKNOWN',
+            message: 'Digite o nome de uma cidade para pesquisar.',
+          },
+        })
+        return
       }
 
-      const label = formatCitySuggestionLabel(target)
-      const report = await fetchWeatherByCoords(target.latitude, target.longitude, label)
-      setState({ status: 'success', report })
-    } catch (error) {
-      setState({
-        status: 'error',
-        error: {
-          code: 'NETWORK',
-          message:
-            error instanceof Error
-              ? error.message
-              : 'Não foi possível buscar essa cidade agora.',
-        },
-      })
-    }
-  }, [])
+      setState({ status: 'loading' })
+
+      try {
+        const matches = await searchCities(normalized)
+        const target = matches[0]
+
+        if (!target) {
+          throw new Error('Não encontramos essa cidade. Tente outro nome.')
+        }
+
+        const label = formatCitySuggestionLabel(target)
+        const report = await fetchWeatherByCoords(target.latitude, target.longitude, label)
+        handleSuccess(mergeReportLabel(report, label))
+      } catch (error) {
+        setState({
+          status: 'error',
+          error: {
+            code: 'NETWORK',
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Não foi possível buscar essa cidade agora.',
+          },
+        })
+      }
+    },
+    [handleSuccess],
+  )
+
+  const selectSavedLocation = useCallback(
+    async (entry: SavedLocation) => {
+      setState({ status: 'loading' })
+      try {
+        const report = await fetchWeatherByCoords(entry.latitude, entry.longitude, entry.label)
+        handleSuccess(report)
+      } catch (error) {
+        setState({
+          status: 'error',
+          error: {
+            code: 'NETWORK',
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Não foi possível buscar essa cidade agora.',
+          },
+        })
+      }
+    },
+    [handleSuccess],
+  )
 
   useEffect(() => {
     loadWeather()
@@ -146,5 +227,7 @@ export const useWeatherController = () => {
     isLoading: state.status === 'loading',
     refresh: loadWeather,
     searchWeather,
+    selectSavedLocation,
+    history,
   }
 }

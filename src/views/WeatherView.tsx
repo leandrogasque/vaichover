@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useWeatherController } from '../controllers/useWeatherController'
-import type { WeatherReport } from '../models/weather'
+import type { HourlyPoint, WeatherReport } from '../models/weather'
 
 type WeatherTheme = 'rain' | 'storm' | 'hot' | 'cold' | 'mild'
 type ForecastTheme = 'wet' | 'storm' | 'hot' | 'cold' | 'mild'
@@ -20,14 +20,6 @@ const formatTime = (date: Date, timezone?: string) => {
   }
 }
 
-const buildRainMessage = (report: WeatherReport) =>
-  report.willRain ? 'Sim, leve o guarda-chuva.' : 'Hoje não deve chover.'
-
-const formatLocationLabel = (report: WeatherReport) => {
-  if (report.location.label) return report.location.label
-  return `Lat ${report.location.latitude.toFixed(2)}, Lon ${report.location.longitude.toFixed(2)}`
-}
-
 const formatWeekday = (dateStr: string, timezone?: string) => {
   try {
     return new Intl.DateTimeFormat('pt-BR', {
@@ -40,6 +32,26 @@ const formatWeekday = (dateStr: string, timezone?: string) => {
   } catch {
     return dateStr
   }
+}
+
+const formatHourLabel = (dateStr: string, timezone?: string) => {
+  try {
+    return new Intl.DateTimeFormat('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: timezone ?? 'UTC',
+    }).format(new Date(dateStr))
+  } catch {
+    return dateStr
+  }
+}
+
+const buildRainMessage = (report: WeatherReport) =>
+  report.willRain ? 'Sim, leve o guarda-chuva.' : 'Hoje não deve chover.'
+
+const formatLocationLabel = (report: WeatherReport) => {
+  if (report.location.label) return report.location.label
+  return `Lat ${report.location.latitude.toFixed(2)}, Lon ${report.location.longitude.toFixed(2)}`
 }
 
 const HeroParticles = ({ theme }: { theme: WeatherTheme }) => {
@@ -114,18 +126,8 @@ const heroIcons: Record<WeatherTheme, ReactNode> = {
   cold: (
     <svg viewBox="0 0 80 80" aria-hidden="true">
       <circle cx="40" cy="32" r="18" fill="#38bdf8" />
-      <path
-        d="M40 50v20"
-        stroke="#0ea5e9"
-        strokeWidth="6"
-        strokeLinecap="round"
-      />
-      <path
-        d="M30 66h20"
-        stroke="#38bdf8"
-        strokeWidth="6"
-        strokeLinecap="round"
-      />
+      <path d="M40 50v20" stroke="#0ea5e9" strokeWidth="6" strokeLinecap="round" />
+      <path d="M30 66h20" stroke="#38bdf8" strokeWidth="6" strokeLinecap="round" />
     </svg>
   ),
   mild: (
@@ -140,6 +142,15 @@ const heroIcons: Record<WeatherTheme, ReactNode> = {
       />
     </svg>
   ),
+}
+
+const detectTheme = (report?: WeatherReport): WeatherTheme => {
+  if (!report) return 'mild'
+  if (report.willRain && report.rainProbability >= 75) return 'storm'
+  if (report.willRain) return 'rain'
+  if (report.temperature >= 30) return 'hot'
+  if (report.temperature <= 18) return 'cold'
+  return 'mild'
 }
 
 const detectForecastTheme = (day: WeatherReport['forecast'][number]): ForecastTheme => {
@@ -216,13 +227,66 @@ const ForecastIcon = ({ theme }: { theme: ForecastTheme }) => {
   }
 }
 
-const detectTheme = (report?: WeatherReport): WeatherTheme => {
-  if (!report) return 'mild'
-  if (report.willRain && report.rainProbability >= 75) return 'storm'
-  if (report.willRain) return 'rain'
-  if (report.temperature >= 30) return 'hot'
-  if (report.temperature <= 18) return 'cold'
-  return 'mild'
+const HourlyChart = ({
+  points,
+  timezone,
+}: {
+  points: HourlyPoint[]
+  timezone?: string
+}) => {
+  const data = points.slice(0, 12)
+  if (data.length < 2) {
+    return null
+  }
+
+  const temps = data.map((point) => point.temperature)
+  const minTemp = Math.min(...temps)
+  const maxTemp = Math.max(...temps)
+  const range = Math.max(maxTemp - minTemp, 1)
+  const width = 320
+  const height = 120
+
+  const tempPoints = data
+    .map((point, index) => {
+      const x = (index / (data.length - 1)) * width
+      const y = height - ((point.temperature - minTemp) / range) * height
+      return `${x},${y}`
+    })
+    .join(' ')
+
+  return (
+    <div className="hourly-card">
+      <div className="hourly-chart">
+        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Tendência das próximas horas">
+          <polyline className="hourly-temp-line" points={tempPoints} />
+          {data.map((point, index) => {
+            const barWidth = 12
+            const x = (index / (data.length - 1)) * width - barWidth / 2
+            const barHeight = (point.precipitationProbability / 100) * height
+            return (
+              <rect
+                key={`bar-${point.time}`}
+                className="hourly-rain-bar"
+                x={Math.max(0, x)}
+                y={height - barHeight}
+                width={barWidth}
+                height={barHeight}
+                rx={4}
+              />
+            )
+          })}
+        </svg>
+      </div>
+      <div className="hourly-labels">
+        {data.map((point) => (
+          <div key={point.time}>
+            <span>{formatHourLabel(point.time, timezone)}</span>
+            <small>{Math.round(point.temperature)}°</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 const buildInsight = (report: WeatherReport) => {
@@ -255,7 +319,14 @@ const Skeleton = () => (
 )
 
 export const WeatherView = () => {
-  const { state, refresh, isLoading, searchWeather } = useWeatherController()
+  const {
+    state,
+    refresh,
+    isLoading,
+    searchWeather,
+    selectSavedLocation,
+    history,
+  } = useWeatherController()
   const { report, error, status } = state
   const [query, setQuery] = useState('')
 
@@ -297,11 +368,28 @@ export const WeatherView = () => {
     return Math.round(report.temperature + (report.willRain ? -1.5 : 1.5))
   }, [report])
 
+  const canShare = typeof navigator.share === 'function'
+
   const needsPermissionPrompt = error?.code === 'GEO_DENIED'
 
   const onSubmitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     searchWeather(query)
+  }
+
+  const handleShare = async () => {
+    if (!report || !canShare) return
+    try {
+      await navigator.share({
+        title: 'Será que vai chover?',
+        text: `${report.location.label ?? 'Sua localização'}: ${formatTemperature(
+          report.temperature,
+        )}°C · ${buildRainMessage(report)}`,
+        url: window.location.href,
+      })
+    } catch {
+      // usuário cancelou
+    }
   }
 
   return (
@@ -321,13 +409,31 @@ export const WeatherView = () => {
         </button>
       </form>
 
+      {history.length > 0 && (
+        <div className="history-chips">
+          <span>Cidades recentes:</span>
+          <div className="chip-list">
+            {history.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                className="history-chip"
+                onClick={() => selectSavedLocation(item)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {needsPermissionPrompt && (
         <div className="permission-banner" role="alert">
           <div>
             <strong>Ative sua localização</strong>
             <p>
-              O navegador bloqueou o GPS. Toque em &ldquo;Permitir localização&rdquo; para solicitar
-              novamente e habilitar previsões hiperlocais.
+              O navegador bloqueou o GPS. Toque em “Permitir localização” ou selecione uma cidade
+              recente para habilitar previsões hiperlocais.
             </p>
           </div>
           <button type="button" onClick={refresh}>
@@ -394,6 +500,16 @@ export const WeatherView = () => {
             </article>
           </section>
 
+          {report.hourly.length > 0 && (
+            <section className="hourly-section">
+              <header>
+                <p>Próximas horas</p>
+                <span>Temperatura e chance de chuva ao longo das próximas 12 horas.</span>
+              </header>
+              <HourlyChart points={report.hourly} timezone={report.timezone} />
+            </section>
+          )}
+
           {report.forecast.length > 0 && (
             <section className="forecast-section">
               <header>
@@ -451,6 +567,11 @@ export const WeatherView = () => {
         >
           {isLoading ? 'Atualizando...' : 'Atualizar agora'}
         </button>
+        {canShare && report && (
+          <button type="button" className="secondary-button" onClick={handleShare}>
+            Compartilhar previsão
+          </button>
+        )}
       </div>
 
       {status === 'error' && error && (
