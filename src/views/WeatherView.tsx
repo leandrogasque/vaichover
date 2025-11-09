@@ -344,6 +344,12 @@ export const WeatherView = () => {
     canNotify,
     notificationPermission,
     requestNotificationPermission,
+    pushSupported,
+    pushConfigured,
+    pushStatus,
+    pushToken,
+    subscribePush,
+    unsubscribePush,
   } = useWeatherController()
   const { report, error, status } = state
   const [query, setQuery] = useState('')
@@ -414,6 +420,25 @@ export const WeatherView = () => {
     preferences.quietHoursStart,
     preferences.quietHoursEnd,
   ])
+
+  const pushStatusCopy = useMemo(() => {
+    if (!pushConfigured) {
+      return 'Defina as variáveis do Firebase e VITE_PUSH_PUBLIC_KEY para habilitar o push.'
+    }
+    if (!pushSupported) {
+      return 'Seu navegador/dispositivo não suporta Web Push.'
+    }
+    switch (pushStatus) {
+      case 'subscribed':
+        return 'Token FCM ativo. Copie e salve no seu backend para disparar notificações.'
+      case 'subscribing':
+        return 'Gerando token seguro...'
+      case 'error':
+        return 'Algo falhou ao gerenciar o push. Tente novamente.'
+      default:
+        return 'Ative o push para receber alertas mesmo com o app fechado.'
+    }
+  }, [pushConfigured, pushSupported, pushStatus])
 
   const needsPermissionPrompt = error?.code === 'GEO_DENIED'
 
@@ -591,6 +616,51 @@ export const WeatherView = () => {
             )}
           </div>
           <small className="alerts-status">{notificationStatusCopy}</small>
+          <div className="push-card">
+            <div className="push-status-line">
+              <span>{pushStatusCopy}</span>
+              {pushConfigured && pushSupported && (
+                <div className="push-actions">
+                  {pushStatus === 'subscribed' ? (
+                    <button
+                      type="button"
+                      className="secondary-button outline"
+                      onClick={() => unsubscribePush().catch(() => undefined)}
+                    >
+                      Cancelar push
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => subscribePush().catch(() => undefined)}
+                    >
+                      Ativar push
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {pushToken && (
+              <>
+                <textarea
+                  className="subscription-box"
+                  readOnly
+                  value={pushToken}
+                  aria-label="Token FCM para envio remoto"
+                />
+                <small>
+                  Copie o token acima e envie para seu backend Firebase Admin (sendToDevice) para
+                  disparar alertas remotos.
+                </small>
+              </>
+            )}
+            {!pushConfigured && (
+              <small className="alerts-status">
+                Defina as variáveis do Firebase + `VITE_PUSH_PUBLIC_KEY` para habilitar o fluxo FCM.
+              </small>
+            )}
+          </div>
         </section>
       )}
 

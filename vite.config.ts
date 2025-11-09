@@ -32,6 +32,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ['custom-sw.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\.open-meteo\.com\//,

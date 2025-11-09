@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { deleteToken, getToken } from 'firebase/messaging'
 import type { WeatherError, WeatherReport, WeatherState } from '../models/weather'
 import { fetchWeatherByCoords } from '../services/weatherService'
 import {
@@ -6,6 +7,7 @@ import {
   reverseGeocode,
   searchCities,
 } from '../services/locationService'
+import { getFirebaseMessaging } from '../lib/firebase'
 
 interface SavedLocation {
   label: string
@@ -19,6 +21,7 @@ const HISTORY_KEY = 'vaichover.history'
 const PREF_KEY = 'vaichover.alertPrefs'
 const HISTORY_LIMIT = 5
 const NOTIFY_COOLDOWN_MS = 60 * 60 * 1000
+const pushPublicKey = import.meta.env.VITE_PUSH_PUBLIC_KEY
 
 interface AlertPreferences {
   enabled: boolean
@@ -44,6 +47,17 @@ const GEO_OPTIONS: PositionOptions = {
   timeout: 10_000,
   maximumAge: 0,
 }
+
+const firebaseEnvReady =
+  typeof import.meta.env !== 'undefined' &&
+  Boolean(
+    import.meta.env.VITE_FIREBASE_API_KEY &&
+      import.meta.env.VITE_FIREBASE_PROJECT_ID &&
+      import.meta.env.VITE_FIREBASE_APP_ID,
+  )
+
+const pushSupported = typeof window !== 'undefined' && 'serviceWorker' in navigator
+const pushConfigured = Boolean(pushPublicKey && firebaseEnvReady)
 
 const readHistory = (): SavedLocation[] => {
   try {
@@ -152,6 +166,10 @@ export const useWeatherController = () => {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     canNotify ? Notification.permission : 'default',
   )
+  const [pushToken, setPushToken] = useState<string | null>(null)
+  const [pushStatus, setPushStatus] = useState<'idle' | 'subscribing' | 'subscribed' | 'error'>(
+    'idle',
+  )
 
   const persistHistory = useCallback((entry: SavedLocation) => {
     setHistory((current) => {
@@ -161,6 +179,28 @@ export const useWeatherController = () => {
       return updated
     })
   }, [])
+
+  useEffect(() => {
+    if (!pushSupported || !pushConfigured) return
+    const fetchExistingToken = async () => {
+      try {
+        const messaging = getFirebaseMessaging()
+        if (!messaging) return
+        const registration = await navigator.serviceWorker.ready
+        const token = await getToken(messaging, {
+          vapidKey: pushPublicKey || undefined,
+          serviceWorkerRegistration: registration,
+        })
+        if (token) {
+          setPushToken(token)
+          setPushStatus('subscribed')
+        }
+      } catch {
+        // ignore
+      }
+    }
+    fetchExistingToken()
+  }, [pushSupported, pushConfigured])
 
   const updatePreferences = useCallback((partial: Partial<AlertPreferences>) => {
     setPreferences((current) => {
@@ -180,6 +220,54 @@ export const useWeatherController = () => {
       return notificationPermission
     }
   }, [canNotify, notificationPermission])
+
+  const subscribePush = useCallback(async () => {
+    if (!pushSupported || !pushConfigured) {
+      setPushStatus('error')
+      throw new Error('Push não suportado ou VAPID não configurado.')
+    }
+    setPushStatus('subscribing')
+    const permission = await requestNotificationPermission()
+    if (permission !== 'granted') {
+      setPushStatus('error')
+      throw new Error('Permissão de notificação negada.')
+    }
+    try {
+      const messaging = getFirebaseMessaging()
+      if (!messaging) {
+        throw new Error('Firebase Messaging não pôde ser inicializado.')
+      }
+      const registration = await navigator.serviceWorker.ready
+      const token = await getToken(messaging, {
+        vapidKey: pushPublicKey || undefined,
+        serviceWorkerRegistration: registration,
+      })
+      if (!token) {
+        throw new Error('Não foi possível gerar o token do Firebase.')
+      }
+      setPushToken(token)
+      setPushStatus('subscribed')
+      return token
+    } catch (error) {
+      setPushStatus('error')
+      throw error
+    }
+  }, [pushSupported, pushConfigured, requestNotificationPermission])
+
+  const unsubscribePush = useCallback(async () => {
+    if (!pushSupported) return
+    try {
+      const messaging = getFirebaseMessaging()
+      if (messaging) {
+        await deleteToken(messaging)
+      }
+      setPushToken(null)
+      setPushStatus('idle')
+    } catch (error) {
+      setPushStatus('error')
+      throw error
+    }
+  }, [pushSupported])
 
   const maybeSendNotification = useCallback(
     (report: WeatherReport, prefs: AlertPreferences) => {
@@ -348,5 +436,11 @@ export const useWeatherController = () => {
     canNotify,
     notificationPermission,
     requestNotificationPermission,
+    pushSupported,
+    pushConfigured,
+    pushStatus,
+    pushToken,
+    subscribePush,
+    unsubscribePush,
   }
 }
