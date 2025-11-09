@@ -817,6 +817,82 @@ footer a {
   accent-color: #2563eb;
 }
 
+.unit-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.unit-toggle span {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.unit-toggle-buttons {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.unit-toggle-buttons button {
+  border-radius: 14px;
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  background: rgba(241, 245, 249, 0.8);
+  padding: 0.35rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.unit-toggle-buttons button[data-state='active'] {
+  border-color: transparent;
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: white;
+}
+
+.quiet-hours {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.quiet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.quiet-header span {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.quiet-header button {
+  border: none;
+  background: none;
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quiet-fields {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.quiet-fields input[type='time'] {
+  flex: 1;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  border-radius: 12px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.95rem;
+}
+
+.quiet-fields span {
+  color: rgba(15, 23, 42, 0.6);
+  font-size: 0.85rem;
+}
+
 .alerts-controls {
   display: flex;
   flex-wrap: wrap;

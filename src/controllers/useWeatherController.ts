@@ -13,6 +13,8 @@ interface SavedLocation {
   longitude: number
 }
 
+type TemperatureUnit = 'celsius' | 'fahrenheit'
+
 const HISTORY_KEY = 'vaichover.history'
 const PREF_KEY = 'vaichover.alertPrefs'
 const HISTORY_LIMIT = 5
@@ -22,11 +24,19 @@ interface AlertPreferences {
   enabled: boolean
   threshold: number
   lastNotifiedAt?: string
+  unit: TemperatureUnit
+  quietHoursEnabled: boolean
+  quietHoursStart: string
+  quietHoursEnd: string
 }
 
 const DEFAULT_PREFS: AlertPreferences = {
   enabled: false,
   threshold: 60,
+  unit: 'celsius',
+  quietHoursEnabled: false,
+  quietHoursStart: '22:00',
+  quietHoursEnd: '06:00',
 }
 
 const GEO_OPTIONS: PositionOptions = {
@@ -115,6 +125,25 @@ const mergeReportLabel = (report: WeatherReport, label?: string): WeatherReport 
   }
 }
 
+const convertTemperature = (value: number, unit: TemperatureUnit) =>
+  unit === 'fahrenheit' ? (value * 9) / 5 + 32 : value
+
+const isWithinQuietHours = (prefs: AlertPreferences, reference = new Date()) => {
+  if (!prefs.quietHoursEnabled) return false
+  const toMinutes = (time: string) => {
+    const [h, m] = time.split(':').map(Number)
+    return h * 60 + (m || 0)
+  }
+  const start = toMinutes(prefs.quietHoursStart)
+  const end = toMinutes(prefs.quietHoursEnd)
+  const current = reference.getHours() * 60 + reference.getMinutes()
+
+  if (start <= end) {
+    return current >= start && current < end
+  }
+  return current >= start || current < end
+}
+
 export const useWeatherController = () => {
   const [state, setState] = useState<WeatherState>({ status: 'idle' })
   const [history, setHistory] = useState<SavedLocation[]>(() => readHistory())
@@ -156,14 +185,17 @@ export const useWeatherController = () => {
     (report: WeatherReport, prefs: AlertPreferences) => {
       if (!prefs.enabled || !canNotify || notificationPermission !== 'granted') return
       if (report.rainProbability < prefs.threshold) return
+      if (isWithinQuietHours(prefs)) return
       const now = Date.now()
       const last = prefs.lastNotifiedAt ? new Date(prefs.lastNotifiedAt).getTime() : 0
       if (now - last < NOTIFY_COOLDOWN_MS) return
 
       try {
-        const body = `${report.location.label ?? 'Sua localização'} · ${Math.round(
-          report.temperature,
-        )}°C · ${Math.round(report.rainProbability)}% de chance de chuva`
+        const unitSymbol = prefs.unit === 'fahrenheit' ? '°F' : '°C'
+        const tempValue = Math.round(convertTemperature(report.temperature, prefs.unit))
+        const body = `${report.location.label ?? 'Sua localização'} · ${tempValue}${unitSymbol} · ${Math.round(
+          report.rainProbability,
+        )}% de chance de chuva`
         // eslint-disable-next-line no-new
         new Notification('Vai chover nas próximas horas?', { body })
         updatePreferences({ lastNotifiedAt: new Date().toISOString() })

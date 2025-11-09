@@ -5,8 +5,15 @@ import type { HourlyPoint, WeatherReport } from '../models/weather'
 
 type WeatherTheme = 'rain' | 'storm' | 'hot' | 'cold' | 'mild'
 type ForecastTheme = 'wet' | 'storm' | 'hot' | 'cold' | 'mild'
+type TemperatureUnit = 'celsius' | 'fahrenheit'
 
-const formatTemperature = (value: number) => Math.round(value)
+const convertTemperature = (value: number, unit: TemperatureUnit) =>
+  unit === 'fahrenheit' ? (value * 9) / 5 + 32 : value
+
+const formatTemperature = (value: number, unit: TemperatureUnit) =>
+  Math.round(convertTemperature(value, unit))
+
+const getUnitSymbol = (unit: TemperatureUnit) => (unit === 'fahrenheit' ? '°F' : '°C')
 
 const formatTime = (date: Date, timezone?: string) => {
   try {
@@ -230,16 +237,18 @@ const ForecastIcon = ({ theme }: { theme: ForecastTheme }) => {
 const HourlyChart = ({
   points,
   timezone,
+  unit,
 }: {
   points: HourlyPoint[]
   timezone?: string
+  unit: TemperatureUnit
 }) => {
   const data = points.slice(0, 12)
   if (data.length < 2) {
     return null
   }
 
-  const temps = data.map((point) => point.temperature)
+  const temps = data.map((point) => convertTemperature(point.temperature, unit))
   const minTemp = Math.min(...temps)
   const maxTemp = Math.max(...temps)
   const range = Math.max(maxTemp - minTemp, 1)
@@ -248,8 +257,9 @@ const HourlyChart = ({
 
   const tempPoints = data
     .map((point, index) => {
+      const converted = convertTemperature(point.temperature, unit)
       const x = (index / (data.length - 1)) * width
-      const y = height - ((point.temperature - minTemp) / range) * height
+      const y = height - ((converted - minTemp) / range) * height
       return `${x},${y}`
     })
     .join(' ')
@@ -281,7 +291,10 @@ const HourlyChart = ({
         {data.map((point) => (
           <div key={point.time}>
             <span>{formatHourLabel(point.time, timezone)}</span>
-            <small>{Math.round(point.temperature)}°</small>
+            <small>
+              {formatTemperature(point.temperature, unit)}
+              {getUnitSymbol(unit)}
+            </small>
           </div>
         ))}
       </div>
@@ -370,8 +383,9 @@ export const WeatherView = () => {
 
   const feelsLike = useMemo(() => {
     if (!report) return null
-    return Math.round(report.temperature + (report.willRain ? -1.5 : 1.5))
-  }, [report])
+    const adjusted = report.temperature + (report.willRain ? -1.5 : 1.5)
+    return formatTemperature(adjusted, preferences.unit)
+  }, [report, preferences.unit])
 
   const canShare = typeof navigator.share === 'function'
 
@@ -386,8 +400,20 @@ export const WeatherView = () => {
     if (notificationPermission === 'default') {
       return 'Permita notificações para receber alertas automáticos.'
     }
-    return `Alertas ativos: avisaremos quando a chance de chuva passar de ${preferences.threshold}%.`
-  }, [canNotify, notificationPermission, preferences.enabled, preferences.threshold])
+    const base = `Alertas ativos: avisaremos quando a chance de chuva passar de ${preferences.threshold}%.`
+    if (preferences.quietHoursEnabled) {
+      return `${base} Silêncio entre ${preferences.quietHoursStart} e ${preferences.quietHoursEnd}.`
+    }
+    return base
+  }, [
+    canNotify,
+    notificationPermission,
+    preferences.enabled,
+    preferences.threshold,
+    preferences.quietHoursEnabled,
+    preferences.quietHoursStart,
+    preferences.quietHoursEnd,
+  ])
 
   const needsPermissionPrompt = error?.code === 'GEO_DENIED'
 
@@ -403,12 +429,17 @@ export const WeatherView = () => {
         title: 'Será que vai chover?',
         text: `${report.location.label ?? 'Sua localização'}: ${formatTemperature(
           report.temperature,
-        )}°C · ${buildRainMessage(report)}`,
+          preferences.unit,
+        )}${getUnitSymbol(preferences.unit)} · ${buildRainMessage(report)}`,
         url: window.location.href,
       })
     } catch {
       // usuário cancelou
     }
+  }
+
+  const handleUnitChange = (unit: TemperatureUnit) => {
+    updatePreferences({ unit })
   }
 
   const handleThresholdChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -421,6 +452,14 @@ export const WeatherView = () => {
 
   const handleNotificationPermission = () => {
     requestNotificationPermission()
+  }
+
+  const handleQuietToggle = () => {
+    updatePreferences({ quietHoursEnabled: !preferences.quietHoursEnabled })
+  }
+
+  const handleQuietTimeChange = (field: 'quietHoursStart' | 'quietHoursEnd', value: string) => {
+    updatePreferences({ [field]: value })
   }
 
   return (
@@ -490,6 +529,48 @@ export const WeatherView = () => {
               onChange={handleThresholdChange}
             />
           </label>
+          <div className="unit-toggle">
+            <span>Unidade de temperatura</span>
+            <div className="unit-toggle-buttons">
+              <button
+                type="button"
+                data-state={preferences.unit === 'celsius' ? 'active' : 'inactive'}
+                onClick={() => handleUnitChange('celsius')}
+              >
+                °C
+              </button>
+              <button
+                type="button"
+                data-state={preferences.unit === 'fahrenheit' ? 'active' : 'inactive'}
+                onClick={() => handleUnitChange('fahrenheit')}
+              >
+                °F
+              </button>
+            </div>
+          </div>
+          <div className="quiet-hours">
+            <div className="quiet-header">
+              <span>Silenciar alertas</span>
+              <button type="button" onClick={handleQuietToggle}>
+                {preferences.quietHoursEnabled ? 'Remover silêncio' : 'Definir silêncio'}
+              </button>
+            </div>
+            <div className="quiet-fields">
+              <input
+                type="time"
+                value={preferences.quietHoursStart}
+                disabled={!preferences.quietHoursEnabled}
+                onChange={(event) => handleQuietTimeChange('quietHoursStart', event.target.value)}
+              />
+              <span>até</span>
+              <input
+                type="time"
+                value={preferences.quietHoursEnd}
+                disabled={!preferences.quietHoursEnabled}
+                onChange={(event) => handleQuietTimeChange('quietHoursEnd', event.target.value)}
+              />
+            </div>
+          </div>
           <div className="alerts-controls">
             <button
               type="button"
@@ -528,8 +609,8 @@ export const WeatherView = () => {
             <div className="hero-info">
               <p className="location-chip">{formatLocationLabel(report)}</p>
               <p className="temperature">
-                <span>{formatTemperature(report.temperature)}</span>
-                <sup>&deg;C</sup>
+                <span>{formatTemperature(report.temperature, preferences.unit)}</span>
+                <sup>{getUnitSymbol(preferences.unit)}</sup>
               </p>
 
               <p className="rain-message">{buildRainMessage(report)}</p>
@@ -565,7 +646,9 @@ export const WeatherView = () => {
             <article className="meta-card" data-variant="feel">
               <header>
                 <span>Sensação estimada</span>
-                <strong>{feelsLike !== null ? `${feelsLike}\u00B0C` : '--'}</strong>
+                <strong>
+                  {feelsLike !== null ? `${feelsLike}${getUnitSymbol(preferences.unit)}` : '--'}
+                </strong>
               </header>
               <p>Considera a combinação de umidade e tendência de vento para ajustes rápidos.</p>
             </article>
@@ -577,7 +660,11 @@ export const WeatherView = () => {
                 <p>Próximas horas</p>
                 <span>Temperatura e chance de chuva ao longo das próximas 12 horas.</span>
               </header>
-              <HourlyChart points={report.hourly} timezone={report.timezone} />
+              <HourlyChart
+                points={report.hourly}
+                timezone={report.timezone}
+                unit={preferences.unit}
+              />
             </section>
           )}
 
@@ -598,13 +685,19 @@ export const WeatherView = () => {
                       style={{ animationDelay: `${index * 0.1}s` }}
                     >
                       <div className="forecast-card__top">
-                        <div>
-                          <p className="forecast-day">{formatWeekday(day.date, report.timezone)}</p>
-                          <p className="forecast-temp">
-                            <span>{Math.round(day.maxTemp)}°</span>
-                            <small>{Math.round(day.minTemp)}°</small>
-                          </p>
-                        </div>
+                      <div>
+                        <p className="forecast-day">{formatWeekday(day.date, report.timezone)}</p>
+                        <p className="forecast-temp">
+                          <span>
+                            {formatTemperature(day.maxTemp, preferences.unit)}
+                            {getUnitSymbol(preferences.unit)}
+                          </span>
+                          <small>
+                            {formatTemperature(day.minTemp, preferences.unit)}
+                            {getUnitSymbol(preferences.unit)}
+                          </small>
+                        </p>
+                      </div>
                         <div className="forecast-icon">
                           <ForecastIcon theme={dayTheme} />
                         </div>
