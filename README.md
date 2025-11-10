@@ -7,6 +7,7 @@ Aplicação web responsiva construída com React 19 + Vite + TypeScript para res
 - **Previsão hiperlocal:** leitura atual com temperatura, mensagem contextual, probabilidade de chuva e métricas detalhadas.
 - **Busca manual e histórico:** pesquise outras cidades e reutilize consultas recentes com um toque abaixo do cartão principal.
 - **Linha do tempo de 12 horas:** gráfico em barras destaca variações de temperatura e chance de chuva a cada hora.
+- **Indicadores ambientais:** cards exibem umidade relativa e velocidade/rajadas de vento da última leitura.
 - **Próximos dias sem duplicar hoje:** a seção ignora o dia já exibido no herói, mantendo apenas os próximos cinco dias úteis.
 - **Alertas inteligentes + Web Push:** defina limiar de probabilidade, configure quiet hours e habilite push com cadastro automático.
 - **PWA e cache offline:** workbox armazena API e assets essenciais; funciona sem rede após o primeiro carregamento.

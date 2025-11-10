@@ -9,6 +9,9 @@ export interface WeatherReport {
   rainProbability: number
   precipitationSum: number
   willRain: boolean
+  humidity?: number
+  windSpeed?: number
+  windGust?: number
   timezone: string
   updatedAt: Date
   location: GeoPoint

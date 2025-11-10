@@ -56,6 +56,8 @@ const formatHourLabel = (dateStr: string, timezone?: string) => {
   }
 }
 
+const formatWind = (value?: number) => (typeof value === 'number' ? `${Math.round(value)} km/h` : '--')
+
 const buildRainMessage = (report: WeatherReport) =>
   report.willRain ? 'Sim, leve o guarda-chuva.' : 'Hoje não deve chover.'
 
@@ -694,7 +696,30 @@ export const WeatherView = () => {
               </header>
               <p>Considera a combina��o de umidade e tend�ncia de vento para ajustes r�pidos.</p>
             </article>
-          </section>
+
+            {typeof report.humidity === 'number' && (
+              <article className="meta-card" data-variant="humidity">
+                <header>
+                  <span>Umidade relativa</span>
+                  <strong>{Math.round(report.humidity)}%</strong>
+                </header>
+                <p>N�vel atual obtido da esta��o Open-Meteo.</p>
+              </article>
+            )}
+
+            {typeof report.windSpeed === 'number' && (
+              <article className="meta-card" data-variant="wind">
+                <header>
+                  <span>Vento a 10 m</span>
+                  <strong>{formatWind(report.windSpeed)}</strong>
+                </header>
+                <p>
+                  {typeof report.windGust === 'number'
+                    ? `Rajadas até ${formatWind(report.windGust)}`
+                    : 'Velocidade instantânea medida na última leitura.'}
+                </p>
+              </article>
+            )}          </section>
 
           {report.hourly.length > 0 && (
             <section className="hourly-section">
@@ -791,6 +816,7 @@ export const WeatherView = () => {
     </div>
   )
 }
+
 
 
 

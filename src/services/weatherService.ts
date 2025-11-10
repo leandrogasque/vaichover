@@ -29,6 +29,9 @@ interface OpenMeteoResponse {
   current?: {
     time: string
     temperature_2m: number
+    relative_humidity_2m?: number
+    wind_speed_10m?: number
+    wind_gusts_10m?: number
   }
   daily?: {
     time: string[]
@@ -48,7 +51,7 @@ const buildUrl = (latitude: number, longitude: number) => {
   const params = new URLSearchParams({
     latitude: latitude.toString(),
     longitude: longitude.toString(),
-    current: 'temperature_2m',
+    current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m',
     daily:
       'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum',
     hourly: 'temperature_2m,precipitation_probability',
@@ -115,6 +118,9 @@ const normalizeReport = (
     rainProbability,
     precipitationSum,
     willRain: rainProbability >= RAIN_THRESHOLD,
+    humidity: payload.current.relative_humidity_2m,
+    windSpeed: payload.current.wind_speed_10m,
+    windGust: payload.current.wind_gusts_10m,
     timezone: payload.timezone,
     updatedAt: payload.current.time ? new Date(payload.current.time) : new Date(),
     location: {
