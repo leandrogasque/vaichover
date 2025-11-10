@@ -1,56 +1,59 @@
 # Será que vai chover?
 
-Aplicação web responsiva criada com React + Vite + TypeScript. Ela identifica automaticamente a localização do usuário (smartphone ou desktop) e consulta a API gratuita da [Open-Meteo](https://open-meteo.com/) para mostrar a temperatura atual e indicar se existe chance real de chuva no dia.
+Aplicação web responsiva construída com React 19 + Vite + TypeScript para responder rapidamente se você precisa sair com guarda-chuva. O app identifica automaticamente sua localização, consulta dados gratuitos da [Open-Meteo](https://open-meteo.com/) e apresenta um painel hiperlocal, com alertas inteligentes e suporte a PWA/offline.
 
-## Stack e arquitetura
+## Principais recursos
 
-- **Vite + React 19 + TypeScript:** renderização rápida, HMR e tipagem segura.
-- **Modelo (Model):** `src/models/weather.ts` define os contratos de dados e limites de negócio, enquanto `src/services/weatherService.ts` centraliza a comunicação com a Open-Meteo.
-- **Controle (Controller):** `src/controllers/useWeatherController.ts` é um hook que orquestra geolocalização, buscas manuais por cidade, chamadas à API e estado global da tela.
-- **Visão (View):** componentes React em `src/views/WeatherView.tsx` e `src/App.tsx` renderizam o cartão com temperatura, mensagem sobre chuva e feedback de status.
-- **Camada de estilo:** CSS moderno no escopo do App (`src/App.css` + `src/index.css`) para oferecer UI limpa e responsiva pronta para dispositivos móveis.
-- **Busca manual + histórico:** a barra no topo usa o geocoding público da Open-Meteo para localizar cidades e salvar consultas recentes como fallback quando o GPS é negado.
-- **Timeline horária e compartilhamento:** um cartão exclusivo mostra a tendência das próximas 12 horas e o botão “Compartilhar previsão” usa a Web Share API para enviar o resumo para outras pessoas.
-- **Alertas inteligentes:** defina um limite mínimo de probabilidade e receba notificações quando o app detectar chuva acima do patamar escolhido (requer permissão do navegador).
-- **Web Push (opcional):** configure o Firebase Cloud Messaging (`VITE_FIREBASE_*` + `VITE_PUSH_PUBLIC_KEY`) e use o painel para gerar o token FCM que será enviado ao backend.
+- **Previsão hiperlocal:** leitura atual com temperatura, mensagem contextual, probabilidade de chuva e métricas detalhadas.
+- **Busca manual e histórico:** pesquise outras cidades e reutilize consultas recentes com um toque abaixo do cartão principal.
+- **Linha do tempo de 12 horas:** gráfico em barras destaca variações de temperatura e chance de chuva a cada hora.
+- **Próximos dias sem duplicar hoje:** a seção ignora o dia já exibido no herói, mantendo apenas os próximos cinco dias úteis.
+- **Alertas inteligentes + Web Push:** defina limiar de probabilidade, configure quiet hours e habilite push com cadastro automático.
+- **PWA e cache offline:** workbox armazena API e assets essenciais; funciona sem rede após o primeiro carregamento.
 
-## Como executar localmente
+## Arquitetura em camadas
 
-1. Instale as dependências:  
-   ```bash
-   npm install
-   ```
-2. Suba o servidor de desenvolvimento (com HMR):  
-   ```bash
-   npm run dev
-   ```
-3. Gere o build de produção (valida o TypeScript e empacota os assets):  
-   ```bash
-   npm run build
-   ```
-4. Para inspecionar o build, rode `npm run preview`.
+| Camada | Responsabilidade |
+| ------ | ---------------- |
+| `src/models/weather.ts` | Tipos compartilhados (relatórios, pontos horários, erros) e constantes de negócio. |
+| `src/services/weatherService.ts` | Integração com Open-Meteo: monta URLs, normaliza respostas, filtra dias passados e transforma dados por fuso. |
+| `src/services/locationService.ts` | Reverse geocoding (BigDataCloud) e busca de cidades (Open-Meteo Geocoding). |
+| `src/controllers/useWeatherController.ts` | Hook que orquestra geolocalização, histórico, preferências, alertas locais e fluxo de push. |
+| `src/views/WeatherView.tsx` | UI declarativa do painel (hero, busca, gráficos, forecast, ações). |
+| `api/_firebaseAdmin.ts`, `api/register-token.ts`, `api/send-notification.ts` | Funções serverless (Vercel) para registrar tokens e disparar notificações via Firebase Admin. |
 
-## Observações importantes
+## Executando localmente
 
-- A geolocalização exige conexão segura (`https://`) quando hospedada na web. Ao testar localmente via `npm run dev`, o navegador pode pedir permissão explícita para compartilhar a localização.
-- Caso o usuário negue o acesso ou o dispositivo não ofereça GPS, o app mostra mensagens amigáveis e permite tentar novamente ou pesquisar manualmente a cidade desejada.
-- A aplicação pode ser instalada como PWA (Adicionar à tela inicial) e mantém os últimos dados no modo offline.
-- Alertas funcionam somente após conceder permissão de notificações; caso o navegador bloqueie, libere nas configurações do site.
-- Toda a lógica é client-side, utilizando apenas APIs gratuitas, sem necessidade de chaves ou infraestrutura adicional.
+```bash
+npm install
+npm run dev        # ambiente de desenvolvimento com HMR
+npm run build      # validação TypeScript + bundle de produção
+npm run preview    # servidor que inspeciona o build produzido
+```
 
-## Push remoto (Firebase Cloud Messaging)
+O app roda em [http://localhost:5173](http://localhost:5173). Para que a geolocalização funcione em produção, publique sob HTTPS; em desenvolvimento, o navegador pode pedir permissão explícita.
 
-1. Gere as chaves Web Push no console do Firebase (Configurações do projeto > Cloud Messaging) e copie o `firebaseConfig` (API key, sender id, etc.).
-2. Preencha o `.env` com `VITE_FIREBASE_*`, `VITE_PUSH_PUBLIC_KEY` e defina no Vercel a variável `FIREBASE_SERVICE_ACCOUNT` (conteúdo JSON da conta de serviço).
-3. No cartão “Alertas Inteligentes”, clique em **Ativar push**. Copie o token FCM exibido no textarea e salve-o no backend.
-4. Faça um POST para `https://<seu-projeto>.vercel.app/api/send-notification` com um JSON como:
-   ```json
-   {
-     "token": "TOKEN_COPIADO_DO_APP",
-     "title": "Alerta de chuva",
-     "body": "70% de chance nas próximas horas",
-     "url": "https://seu-dominio.com/"
-   }
-   ```
-   O endpoint usa `firebase-admin` para chamar `messaging().sendToDevice`.
-5. O `custom-sw.js` (alimentado pelo Firebase Messaging) recebe o push, exibe a notificação e abre o app ao tocar.
+## Notificações push
+
+1. Crie um projeto Firebase e habilite Cloud Messaging.
+2. Preencha as variáveis `VITE_FIREBASE_*`, `VITE_PUSH_PUBLIC_KEY` e `FIREBASE_SERVICE_ACCOUNT` (JSON da service account) no `.env`/Vercel.
+3. Ao ativar push no app, o token é salvo automaticamente pelo endpoint `POST /api/register-token` (Firestore em `pushSubscribers`).
+4. Para remover, o botão "Cancelar push" chama `DELETE /api/register-token`.
+5. Use `POST /api/send-notification` para disparar alertas:
+
+```json
+{
+  "token": "TOKEN_SALVO",
+  "title": "Alerta de chuva",
+  "body": "70% de chance nas próximas horas",
+  "url": "https://seu-dominio.com/"
+}
+```
+
+O service worker (`public/custom-sw.js`) recebe a mensagem e abre o app ao tocar na notificação.
+
+## Observações úteis
+
+- Geolocalização exige HTTPS e pode ser recusada; o app oferece estados de erro amigáveis e fallback por busca manual.
+- Alertas locais respeitam quiet hours e cooldown para evitar spam.
+- O PWA armazena a última leitura; para forçar novas versões em desenvolvimento, desabilite/limpe o service worker antes de validar mudanças.

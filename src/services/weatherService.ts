@@ -3,10 +3,29 @@ import type { DailyForecast, GeoPoint, HourlyPoint, WeatherReport } from '../mod
 
 const OPEN_METEO_ENDPOINT = 'https://api.open-meteo.com/v1/forecast'
 
+const getTodayString = (payload: OpenMeteoResponse) => {
+  if (typeof payload.utc_offset_seconds === 'number') {
+    const adjusted = new Date(Date.now() + payload.utc_offset_seconds * 1000)
+    return adjusted.toISOString().slice(0, 10)
+  }
+
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: payload.timezone ?? 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
+  } catch {
+    return new Date().toISOString().slice(0, 10)
+  }
+}
+
 interface OpenMeteoResponse {
   latitude: number
   longitude: number
   timezone: string
+  utc_offset_seconds?: number
   current?: {
     time: string
     temperature_2m: number
@@ -34,7 +53,7 @@ const buildUrl = (latitude: number, longitude: number) => {
       'temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum',
     hourly: 'temperature_2m,precipitation_probability',
     timezone: 'auto',
-    forecast_days: '5',
+    forecast_days: '7',
     past_days: '0',
   })
 
@@ -42,8 +61,10 @@ const buildUrl = (latitude: number, longitude: number) => {
 }
 
 const buildForecast = (payload: OpenMeteoResponse): DailyForecast[] => {
+  const baseDate = payload.current?.time?.slice(0, 10) ?? getTodayString(payload)
+  const baseValue = Date.parse(`${baseDate}T00:00:00Z`)
   const days = payload.daily?.time ?? []
-  return days.slice(0, 5).map((date, index) => {
+  const entries = days.map((date, index) => {
     const precipitationProbability =
       payload.daily?.precipitation_probability_max?.[index] ?? 0
     return {
@@ -54,6 +75,15 @@ const buildForecast = (payload: OpenMeteoResponse): DailyForecast[] => {
       willRain: precipitationProbability >= RAIN_THRESHOLD,
     }
   })
+
+  return entries
+    .filter((day) => {
+      const dayValue = Date.parse(`${day.date}T00:00:00Z`)
+      return Number.isFinite(dayValue)
+        ? dayValue >= baseValue
+        : day.date >= baseDate
+    })
+    .slice(0, 5)
 }
 
 const normalizeHourly = (payload: OpenMeteoResponse): HourlyPoint[] => {

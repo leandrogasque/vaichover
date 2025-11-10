@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { useWeatherController } from '../controllers/useWeatherController'
 import type { HourlyPoint, WeatherReport } from '../models/weather'
@@ -27,6 +27,7 @@ const formatTime = (date: Date, timezone?: string) => {
   }
 }
 
+const createDateFromISODate = (dateStr: string) => new Date(`${dateStr}T12:00:00Z`)
 const formatWeekday = (dateStr: string, timezone?: string) => {
   try {
     return new Intl.DateTimeFormat('pt-BR', {
@@ -34,12 +35,14 @@ const formatWeekday = (dateStr: string, timezone?: string) => {
       day: '2-digit',
       timeZone: timezone ?? 'UTC',
     })
-      .format(new Date(dateStr))
+      .format(createDateFromISODate(dateStr))
       .replace('.', '')
   } catch {
     return dateStr
   }
 }
+
+const isSameCalendarDay = (dateA: string, dateB: string) => dateA === dateB
 
 const formatHourLabel = (dateStr: string, timezone?: string) => {
   try {
@@ -252,56 +255,35 @@ const HourlyChart = ({
   const minTemp = Math.min(...temps)
   const maxTemp = Math.max(...temps)
   const range = Math.max(maxTemp - minTemp, 1)
-  const width = 320
-  const height = 120
-
-  const tempPoints = data
-    .map((point, index) => {
-      const converted = convertTemperature(point.temperature, unit)
-      const x = (index / (data.length - 1)) * width
-      const y = height - ((converted - minTemp) / range) * height
-      return `${x},${y}`
-    })
-    .join(' ')
 
   return (
     <div className="hourly-card">
-      <div className="hourly-chart">
-        <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Tendência das próximas horas">
-          <polyline className="hourly-temp-line" points={tempPoints} />
-          {data.map((point, index) => {
-            const barWidth = 12
-            const x = (index / (data.length - 1)) * width - barWidth / 2
-            const barHeight = (point.precipitationProbability / 100) * height
-            return (
-              <rect
-                key={`bar-${point.time}`}
-                className="hourly-rain-bar"
-                x={Math.max(0, x)}
-                y={height - barHeight}
-                width={barWidth}
-                height={barHeight}
-                rx={4}
-              />
-            )
-          })}
-        </svg>
-      </div>
-      <div className="hourly-labels">
-        {data.map((point) => (
-          <div key={point.time}>
-            <span>{formatHourLabel(point.time, timezone)}</span>
-            <small>
-              {formatTemperature(point.temperature, unit)}
-              {getUnitSymbol(unit)}
-            </small>
-          </div>
-        ))}
+      <div className="hourly-chart" role="img" aria-label="Temperatura por hora nas próximas 12 horas">
+        {data.map((point) => {
+          const converted = convertTemperature(point.temperature, unit)
+          const barHeight = ((converted - minTemp) / range) * 100
+          const adjustedHeight = Math.max(barHeight, 6)
+          const rainChance = Math.round(point.precipitationProbability)
+          return (
+            <div key={point.time} className="hourly-bar-group">
+              <span className="hourly-bar-temp">
+                {formatTemperature(point.temperature, unit)}
+                {getUnitSymbol(unit)}
+              </span>
+              <div className="hourly-bar-track">
+                <div className="hourly-bar-fill" style={{ height: `${adjustedHeight}%` }} />
+              </div>
+              <div className="hourly-bar-meta">
+                <span>{formatHourLabel(point.time, timezone)}</span>
+                <small>Chuva {rainChance}%</small>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
-
 const buildInsight = (report: WeatherReport) => {
   if (report.willRain && report.precipitationSum > 5) {
     return 'Volume consistente de chuva previsto: considere rotas cobertas.'
@@ -347,7 +329,6 @@ export const WeatherView = () => {
     pushSupported,
     pushConfigured,
     pushStatus,
-    pushToken,
     subscribePush,
     unsubscribePush,
   } = useWeatherController()
@@ -377,7 +358,7 @@ export const WeatherView = () => {
     if (status === 'success' && report) {
       return (
         <p className="status-message success">
-          Última atualização às {formatTime(report.updatedAt, report.timezone)}
+          Ultima atualizacao as {formatTime(report.updatedAt, report.timezone)}
         </p>
       )
     }
@@ -436,7 +417,7 @@ export const WeatherView = () => {
       case 'error':
         return 'Algo falhou ao gerenciar o push. Tente novamente.'
       default:
-        return 'Ative o push para receber alertas mesmo com o app fechado.'
+        return 'Ative o push para receber alertas mesmo com o app fechado. O cadastro e automatico.'
     }
   }, [pushConfigured, pushSupported, pushStatus])
 
@@ -488,46 +469,13 @@ export const WeatherView = () => {
   }
 
   return (
-    <>
-      <form className="search-bar" onSubmit={onSubmitSearch}>
-        <input
-          type="search"
-          name="city"
-          className="search-input"
-          placeholder="Digite uma cidade (ex.: Recife)"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          aria-label="Pesquisar outra cidade"
-        />
-        <button type="submit" className="search-button" disabled={isLoading}>
-          Buscar
-        </button>
-      </form>
-
-      {history.length > 0 && (
-        <div className="history-chips">
-          <span>Cidades recentes:</span>
-          <div className="chip-list">
-            {history.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                className="history-chip"
-                onClick={() => selectSavedLocation(item)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
+    <div className="weather-stack">
       {needsPermissionPrompt && (
         <div className="permission-banner" role="alert">
           <div>
             <strong>Ative sua localização</strong>
             <p>
-              O navegador bloqueou o GPS. Toque em “Permitir localização” ou selecione uma cidade
+              O navegador bloqueou o GPS. Toque em "Permitir localização" ou selecione uma cidade
               recente para habilitar previsões hiperlocais.
             </p>
           </div>
@@ -641,19 +589,10 @@ export const WeatherView = () => {
                 </div>
               )}
             </div>
-            {pushToken && (
-              <>
-                <textarea
-                  className="subscription-box"
-                  readOnly
-                  value={pushToken}
-                  aria-label="Token FCM para envio remoto"
-                />
-                <small>
-                  Copie o token acima e envie para seu backend Firebase Admin (sendToDevice) para
-                  disparar alertas remotos.
-                </small>
-              </>
+            {pushStatus === 'subscribed' && (
+              <small className="alerts-status">
+                Cadastro salvo automaticamente. Use o painel para desativar quando quiser.
+              </small>
             )}
             {!pushConfigured && (
               <small className="alerts-status">
@@ -694,6 +633,39 @@ export const WeatherView = () => {
             </div>
           </section>
 
+          <form className="search-bar" onSubmit={onSubmitSearch}>
+            <input
+              type="search"
+              name="city"
+              className="search-input"
+              placeholder="Digite uma cidade (ex.: Recife)"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label="Pesquisar outra cidade"
+            />
+            <button type="submit" className="search-button" disabled={isLoading}>
+              Buscar
+            </button>
+          </form>
+
+          {history.length > 0 && (
+            <div className="history-chips">
+              <span>Cidades recentes:</span>
+              <div className="chip-list">
+                {history.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="history-chip"
+                    onClick={() => selectSavedLocation(item)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <section className="meta-grid">
             <article className="meta-card" data-variant="rain">
               <header>
@@ -701,13 +673,13 @@ export const WeatherView = () => {
                 <strong>{report.precipitationSum.toFixed(1)} mm</strong>
               </header>
               <p>
-                Valores acima de 5&nbsp;mm indicam chuva perceptível durante boa parte do dia.
+                Valores acima de 5&nbsp;mm indicam chuva percept�vel durante boa parte do dia.
               </p>
             </article>
 
             <article className="meta-card" data-variant="confidence">
               <header>
-                <span>Confiança do modelo</span>
+                <span>Confian�a do modelo</span>
                 <strong>{formatConfidence(report.rainProbability)}</strong>
               </header>
               <p>Open-Meteo cruza modelos globais para gerar este score em tempo real.</p>
@@ -715,20 +687,20 @@ export const WeatherView = () => {
 
             <article className="meta-card" data-variant="feel">
               <header>
-                <span>Sensação estimada</span>
+                <span>Sensa��o estimada</span>
                 <strong>
                   {feelsLike !== null ? `${feelsLike}${getUnitSymbol(preferences.unit)}` : '--'}
                 </strong>
               </header>
-              <p>Considera a combinação de umidade e tendência de vento para ajustes rápidos.</p>
+              <p>Considera a combina��o de umidade e tend�ncia de vento para ajustes r�pidos.</p>
             </article>
           </section>
 
           {report.hourly.length > 0 && (
             <section className="hourly-section">
               <header>
-                <p>Próximas horas</p>
-                <span>Temperatura e chance de chuva ao longo das próximas 12 horas.</span>
+                <p>Pr�ximas horas</p>
+                <span>Temperatura e chance de chuva ao longo das pr�ximas 12 horas.</span>
               </header>
               <HourlyChart
                 points={report.hourly}
@@ -741,11 +713,13 @@ export const WeatherView = () => {
           {report.forecast.length > 0 && (
             <section className="forecast-section">
               <header>
-                <p>Próximos dias</p>
-                <span>Atualize antes de sair para validar a última projeção.</span>
+                <p>Pr�ximos dias</p>
+                <span>Atualize antes de sair para validar a �ltima proje��o.</span>
               </header>
               <div className="forecast-cards">
-                {report.forecast.map((day, index) => {
+                {report.forecast
+                  .filter((day) => !isSameCalendarDay(day.date, report.updatedAt.toISOString().slice(0, 10)))
+                  .map((day, index) => {
                   const dayTheme = detectForecastTheme(day)
                   return (
                     <article
@@ -755,19 +729,19 @@ export const WeatherView = () => {
                       style={{ animationDelay: `${index * 0.1}s` }}
                     >
                       <div className="forecast-card__top">
-                      <div>
-                        <p className="forecast-day">{formatWeekday(day.date, report.timezone)}</p>
-                        <p className="forecast-temp">
-                          <span>
-                            {formatTemperature(day.maxTemp, preferences.unit)}
-                            {getUnitSymbol(preferences.unit)}
-                          </span>
-                          <small>
-                            {formatTemperature(day.minTemp, preferences.unit)}
-                            {getUnitSymbol(preferences.unit)}
-                          </small>
-                        </p>
-                      </div>
+                        <div>
+                          <p className="forecast-day">{formatWeekday(day.date, report.timezone)}</p>
+                          <p className="forecast-temp">
+                            <span>
+                              {formatTemperature(day.maxTemp, preferences.unit)}
+                              {getUnitSymbol(preferences.unit)}
+                            </span>
+                            <small>
+                              {formatTemperature(day.minTemp, preferences.unit)}
+                              {getUnitSymbol(preferences.unit)}
+                            </small>
+                          </p>
+                        </div>
                         <div className="forecast-icon">
                           <ForecastIcon theme={dayTheme} />
                         </div>
@@ -814,6 +788,26 @@ export const WeatherView = () => {
           <span>{error.message}</span>
         </div>
       )}
-    </>
+    </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

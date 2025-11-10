@@ -22,6 +22,59 @@
   animation: cardFade 0.6s ease forwards;
 }
 
+.weather-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.weather-stack > .status {
+  order: 0;
+}
+
+.weather-stack > .skeleton-wrapper,
+.weather-stack > .weather-hero {
+  order: 1;
+}
+
+.weather-stack > .search-bar {
+  order: 2;
+}
+
+.weather-stack > .history-chips {
+  order: 3;
+}
+
+.weather-stack > .meta-grid {
+  order: 4;
+}
+
+.weather-stack > .hourly-section {
+  order: 5;
+}
+
+.weather-stack > .forecast-section {
+  order: 6;
+}
+
+.weather-stack > .actions-row {
+  order: 7;
+}
+}
+
+.weather-stack > .permission-banner {
+  order: 8;
+}
+
+.weather-stack > .alerts-card {
+  order: 9;
+}
+
+.weather-stack > .toast {
+  order: 10;
+}
+
 .app-header {
   display: flex;
   flex-direction: column;
@@ -967,38 +1020,71 @@ footer a {
 
 .hourly-chart {
   width: 100%;
+  min-height: 180px;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scroll-snap-type: x proximity;
+  scrollbar-color: rgba(15, 23, 42, 0.2) transparent;
+}
+
+.hourly-chart::-webkit-scrollbar {
+  height: 6px;
+}
+
+.hourly-chart::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.2);
+  border-radius: 999px;
+}
+
+.hourly-bar-group {
+  flex: 0 0 68px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  text-align: center;
+}
+
+.hourly-bar-temp {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.hourly-bar-track {
+  width: 18px;
+  height: 140px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   overflow: hidden;
 }
 
-.hourly-chart svg {
+.hourly-bar-fill {
   width: 100%;
-  height: 140px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #f97316 0%, #fb923c 100%);
+  transition: height 200ms ease, transform 200ms ease;
 }
 
-.hourly-temp-line {
-  fill: none;
-  stroke: #f97316;
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.hourly-bar-group:hover .hourly-bar-fill {
+  transform: translateY(2px);
 }
 
-.hourly-rain-bar {
-  fill: rgba(37, 99, 235, 0.3);
+.hourly-bar-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+  color: rgba(15, 23, 42, 0.75);
 }
 
-.hourly-labels {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-  gap: 0.35rem;
-  margin-top: 0.75rem;
-  font-size: 0.85rem;
-}
-
-.hourly-labels small {
-  display: block;
-  color: rgba(15, 23, 42, 0.65);
-  margin-top: 0.15rem;
+.hourly-bar-meta small {
+  color: rgba(15, 23, 42, 0.6);
 }
 
 .forecast-card__top {

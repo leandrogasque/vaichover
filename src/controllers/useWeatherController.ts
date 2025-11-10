@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { deleteToken, getToken } from 'firebase/messaging'
 import type { WeatherError, WeatherReport, WeatherState } from '../models/weather'
 import { fetchWeatherByCoords } from '../services/weatherService'
@@ -171,6 +171,21 @@ export const useWeatherController = () => {
     'idle',
   )
 
+  const syncPushToken = useCallback(async (token: string, action: 'register' | 'unregister') => {
+    if (!token) return
+    try {
+      await fetch('/api/register-token', {
+        method: action === 'register' ? 'POST' : 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token }),
+      })
+    } catch {
+      // best effort
+    }
+  }, [])
+
   const persistHistory = useCallback((entry: SavedLocation) => {
     setHistory((current) => {
       const filtered = current.filter((item) => item.label !== entry.label)
@@ -194,13 +209,14 @@ export const useWeatherController = () => {
         if (token) {
           setPushToken(token)
           setPushStatus('subscribed')
+          await syncPushToken(token, 'register')
         }
       } catch {
         // ignore
       }
     }
-    fetchExistingToken()
-  }, [pushSupported, pushConfigured])
+    fetchExistingToken().catch(() => undefined)
+  }, [syncPushToken])
 
   const updatePreferences = useCallback((partial: Partial<AlertPreferences>) => {
     setPreferences((current) => {
@@ -224,18 +240,18 @@ export const useWeatherController = () => {
   const subscribePush = useCallback(async () => {
     if (!pushSupported || !pushConfigured) {
       setPushStatus('error')
-      throw new Error('Push não suportado ou VAPID não configurado.')
+      throw new Error('Push nao suportado ou VAPID nao configurado.')
     }
     setPushStatus('subscribing')
     const permission = await requestNotificationPermission()
     if (permission !== 'granted') {
       setPushStatus('error')
-      throw new Error('Permissão de notificação negada.')
+      throw new Error('Permissao de notificacao negada.')
     }
     try {
       const messaging = getFirebaseMessaging()
       if (!messaging) {
-        throw new Error('Firebase Messaging não pôde ser inicializado.')
+        throw new Error('Firebase Messaging nao pode ser inicializado.')
       }
       const registration = await navigator.serviceWorker.ready
       const token = await getToken(messaging, {
@@ -243,23 +259,28 @@ export const useWeatherController = () => {
         serviceWorkerRegistration: registration,
       })
       if (!token) {
-        throw new Error('Não foi possível gerar o token do Firebase.')
+        throw new Error('Nao foi possivel gerar o token do Firebase.')
       }
       setPushToken(token)
       setPushStatus('subscribed')
+      await syncPushToken(token, 'register')
       return token
     } catch (error) {
       setPushStatus('error')
       throw error
     }
-  }, [pushSupported, pushConfigured, requestNotificationPermission])
+  }, [requestNotificationPermission, syncPushToken])
 
   const unsubscribePush = useCallback(async () => {
     if (!pushSupported) return
     try {
       const messaging = getFirebaseMessaging()
+      const currentToken = pushToken
       if (messaging) {
         await deleteToken(messaging)
+      }
+      if (currentToken) {
+        await syncPushToken(currentToken, 'unregister')
       }
       setPushToken(null)
       setPushStatus('idle')
@@ -267,7 +288,7 @@ export const useWeatherController = () => {
       setPushStatus('error')
       throw error
     }
-  }, [pushSupported])
+  }, [pushToken, syncPushToken])
 
   const maybeSendNotification = useCallback(
     (report: WeatherReport, prefs: AlertPreferences) => {
@@ -284,7 +305,6 @@ export const useWeatherController = () => {
         const body = `${report.location.label ?? 'Sua localização'} · ${tempValue}${unitSymbol} · ${Math.round(
           report.rainProbability,
         )}% de chance de chuva`
-        // eslint-disable-next-line no-new
         new Notification('Vai chover nas próximas horas?', { body })
         updatePreferences({ lastNotifiedAt: new Date().toISOString() })
       } catch {
@@ -444,3 +464,8 @@ export const useWeatherController = () => {
     unsubscribePush,
   }
 }
+
+
+
+
+
