@@ -58,6 +58,23 @@ const formatHourLabel = (dateStr: string, timezone?: string) => {
 
 const formatWind = (value?: number) => (typeof value === 'number' ? `${Math.round(value)} km/h` : '--')
 
+const detectPeriod = (report?: WeatherReport): 'day' | 'night' => {
+  if (!report) return 'day'
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      hour: '2-digit',
+      hour12: false,
+      timeZone: report.timezone ?? 'UTC',
+    })
+    const hour = Number(formatter.format(report.updatedAt))
+    if (Number.isFinite(hour) && (hour >= 18 || hour < 6)) return 'night'
+  } catch {
+    const hour = report.updatedAt.getUTCHours()
+    if (hour >= 18 || hour < 6) return 'night'
+  }
+  return 'day'
+}
+
 const buildRainMessage = (report: WeatherReport) =>
   report.willRain ? 'Sim, leve o guarda-chuva.' : 'Hoje não deve chover.'
 
@@ -338,6 +355,7 @@ export const WeatherView = () => {
   const [query, setQuery] = useState('')
 
   const theme = useMemo(() => detectTheme(report), [report])
+  const period = useMemo(() => detectPeriod(report), [report])
   const statusElement = useMemo(() => {
     if (status === 'idle' || status === 'loading') {
       return (
@@ -611,14 +629,19 @@ export const WeatherView = () => {
 
       {report && (
         <>
-          <section className="weather-hero" data-theme={theme}>
+          <section className="weather-hero" data-theme={theme} data-period={period}>
             <div className="hero-gradient" aria-hidden="true" />
             <div className="hero-wave" aria-hidden="true" />
             <HeroParticles theme={theme} />
             <div className="hero-icon">{heroIcons[theme]}</div>
 
             <div className="hero-info">
-              <p className="location-chip">{formatLocationLabel(report)}</p>
+              <div className="hero-context">
+                <p className="location-chip">{formatLocationLabel(report)}</p>
+                <span className="period-pill" data-period={period}>
+                  {period === 'night' ? 'Noite local' : 'Luz do dia'}
+                </span>
+              </div>
               <p className="temperature">
                 <span>{formatTemperature(report.temperature, preferences.unit)}</span>
                 <sup>{getUnitSymbol(preferences.unit)}</sup>
